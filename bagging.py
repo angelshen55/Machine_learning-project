@@ -55,6 +55,8 @@ def load_data():
     df['SF4_log'] = np.log(df['ShapeFactor4'].abs() + 1e-6)
     return df
 
+    
+
 
 
 # 主流程
