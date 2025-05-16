@@ -15,7 +15,7 @@ from itertools import cycle
 # 数据加载与校验
 try:
     df = pd.read_excel(
-        'Dry_Bean_Dataset.xlsx',
+        'DryBeanDataset/Dry_Bean_Dataset.xlsx',
         skiprows=4,
         skipfooter=3,
         header=None,
@@ -45,17 +45,14 @@ try:
     df = df.dropna()
     df = df.apply(pd.to_numeric, errors='ignore')  # 确保Class列保持为字符串
     
-    验证Class列
+    #验证Class列
     if 'Class' not in df.columns:
         raise KeyError("数据中缺少Class列，请检查列名或文件结构")
     
     print("\n类别分布：")
     print(df['Class'].value_counts())
 
-    drop_columns = [
-    'ShapeFactor2', 'Compactness', 'Solidity', 'EquivDiameter',
-    'Extent', 'ConvexArea', 'Area', 'Eccentricity', 'ShapeFactor4']
-    df.drop(columns=drop_columns, inplace=True)
+    
 
 except Exception as e:
     print(f"数据加载失败: {str(e)}")

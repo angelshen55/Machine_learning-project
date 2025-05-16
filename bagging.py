@@ -11,15 +11,21 @@ from sklearn.metrics import (
     classification_report, 
     confusion_matrix, 
     roc_curve, 
-    auc
+    auc,
+    roc_auc_score,
+    f1_score
 )
 from sklearn.preprocessing import label_binarize
 from itertools import cycle
+from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import cross_validate
+
+
 
 # 配置参数
 RANDOM_STATE = 42
 TEST_SIZE = 0.3
-FILE_PATH = 'Dry_Bean_Dataset.xlsx'
+FILE_PATH = 'DryBeanDataset/Dry_Bean_Dataset.xlsx'
 
 # 数据加载与预处理
 def load_data():
@@ -67,39 +73,74 @@ def main():
     )
     
     # 配置基学习器
-    md = 5
-    for md in range(5,50):
-        base_tree = DecisionTreeClassifier(
-            max_depth=md,
-            min_samples_split=10,
-            random_state=RANDOM_STATE
-        )
-
+    base_tree = DecisionTreeClassifier(
+        max_depth=13,
+        min_samples_split=10,
+        random_state=RANDOM_STATE
+    )
+    
+    # 创建Bagging模型
+    bagging = BaggingClassifier(
+        estimator=base_tree,
+        n_estimators=100,
+        max_samples=0.8,
+        max_features=0.8,
+        bootstrap=True,
+        n_jobs=-1,
+        random_state=RANDOM_STATE
+    )
         
-        # 创建Bagging模型
-        bagging = BaggingClassifier(
-            estimator=base_tree,
-            n_estimators=100,
-            max_samples=0.8,
-            max_features=0.7,
-            bootstrap=True,
-            n_jobs=-1,
-            random_state=RANDOM_STATE
-        )
-        
-        # 训练模型
-        bagging.fit(X_train, y_train)
-        
-        # 模型评估
-        y_pred = bagging.predict(X_test)
-        y_proba = bagging.predict_proba(X_test)
-        print(f"max depth = {md} 准确率: {accuracy_score(y_test, y_pred):.2%}")
+    
+    # 训练模型
+    bagging.fit(X_train, y_train)
+    
+    # 模型评估
+    y_pred = bagging.predict(X_test)
+    y_proba = bagging.predict_proba(X_test)
+    print(f"准确率: {accuracy_score(y_test, y_pred):.2%}")
+
+    # 1. 准确率
+    accuracy = accuracy_score(y_test, y_pred)
+    print(f"准确率: {accuracy:.2%}")
+    
+    # 2. 加权 F1 分数
+    weighted_f1 = f1_score(y_test, y_pred, average='weighted')
+    print(f"加权 F1 分数: {weighted_f1:.2%}")
+    
+    # 3. 宏平均 AUC-ROC
+    y_test_bin = label_binarize(y_test, classes=bagging.classes_)
+    macro_auc = roc_auc_score(y_test_bin, y_proba, average='macro')
+    print(f"宏平均 AUC-ROC: {macro_auc:.4f}")
+    
+    # 4. 交叉验证多指标评估
+    scoring = {
+        'accuracy': 'accuracy',
+        'f1_weighted': 'f1_weighted',
+        'roc_auc_ovr': 'roc_auc_ovr'
+    }
+    cv_results = cross_validate(
+        bagging,
+        X_train,
+        y_train,
+        cv=10,
+        scoring=scoring
+    )
+    print("\n交叉验证结果:")
+    print(f"平均准确率: {np.mean(cv_results['test_accuracy']):.2%}")
+    print(f"平均加权 F1: {np.mean(cv_results['test_f1_weighted']):.2%}")
+    print(f"平均 AUC-ROC: {np.mean(cv_results['test_roc_auc_ovr']):.4f}")
 
 
-    # # 输出结果
-    # print(f"准确率: {accuracy_score(y_test, y_pred):.2%}")
-    # print("\n分类报告:")
-    # print(classification_report(y_test, y_pred))
+
+
+
+
+
+
+    # 输出结果
+    print(f"准确率: {accuracy_score(y_test, y_pred):.2%}")
+    print("\n分类报告:")
+    print(classification_report(y_test, y_pred))
     
     # # 可视化混淆矩阵
     # plt.figure(figsize=(10, 8))
