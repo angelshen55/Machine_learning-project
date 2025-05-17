@@ -164,8 +164,8 @@ print(classification_report(y_test, y_test_pred, target_names=le.classes_))
 
 
 # ================== 7. Confusion Matrix Generation ==================
-def plot_confusion_matrix(y_true, y_pred, title, filename):
-    """Generate and save confusion matrix with consistent styling."""
+def plot_confusion_matrix(y_true, y_pred, title):
+    """生成并立即显示混淆矩阵"""
     plt.figure(figsize=(12, 10))
     cm = confusion_matrix(y_true, y_pred)
     
@@ -181,109 +181,86 @@ def plot_confusion_matrix(y_true, y_pred, title, filename):
     plt.xticks(rotation=45, fontsize=10)
     plt.yticks(rotation=0, fontsize=10)
     plt.tight_layout()
-    plt.savefig(f'{filename}.png', dpi=300)
-    plt.close()
+    plt.show()  # 立即显示当前图形
 
+# ================== 调用部分修改 ==================
 # 1. Training Set Evaluation
 y_train_pred = final_dt.predict(X_train[best_features])
-plot_confusion_matrix(y_train, y_train_pred, 
-                     'Training Set', 'confusion_matrix_train')
+plot_confusion_matrix(y_train, y_train_pred, 'Training Set')
 
-# 2. Testing Set Evaluation (existing code modified)
-plot_confusion_matrix(y_test, y_pred, 
-                     'Testing Set', 'confusion_matrix_test')
+# 2. Testing Set Evaluation 
+plot_confusion_matrix(y_test, y_test_pred, 'Testing Set')
 
 # 3. Full Dataset Evaluation
 X_all = df.drop(['Class', 'Class_encoded'], axis=1)[best_features]
 y_all = df['Class_encoded']
 y_all_pred = final_dt.predict(X_all)
-plot_confusion_matrix(y_all, y_all_pred,
-                     'Full Dataset', 'confusion_matrix_full')
+plot_confusion_matrix(y_all, y_all_pred, 'Full Dataset')
 
-print("\nConfusion matrices saved as:")
-print("- confusion_matrix_train.png")
-print("- confusion_matrix_test.png") 
-print("- confusion_matrix_full.png")
+# ================== 8. 决策边界可视化 (修复版) ==================
+from sklearn.decomposition import PCA
+from matplotlib.colors import ListedColormap
 
-# # ================== 7. 混淆矩阵 ==================
-# plt.figure(figsize=(12, 10))
-# cm = confusion_matrix(y_test, y_pred)
-# sns.heatmap(cm, annot=True, fmt='d', 
-#            xticklabels=le.classes_, 
-#            yticklabels=le.classes_,
-#            cmap='Blues')
-# plt.title('Confusion Matrix', fontsize=14)
-# plt.xlabel('Predicted Label', fontsize=12)
-# plt.ylabel('True Label', fontsize=12)
-# plt.xticks(rotation=45)
-# plt.yticks(rotation=0)
-# plt.tight_layout()
-# plt.show()
+# 1. PCA降维
+pca = PCA(n_components=2)
+X_pca = pca.fit_transform(X_train[best_features])
 
-# # ================== 8. 决策边界可视化 (修复版) ==================
-# from sklearn.decomposition import PCA
-# from matplotlib.colors import ListedColormap
+# 2. 转换为NumPy数组避免索引问题
+pc1 = X_pca[:, 0]  # 第一主成分
+pc2 = X_pca[:, 1]  # 第二主成分
 
-# # 1. PCA降维
-# pca = PCA(n_components=2)
-# X_pca = pca.fit_transform(X_train[best_features])
+# 3. 训练专用模型
+dt_pca = DecisionTreeClassifier(
+    max_depth=8,
+    min_samples_split=10,
+    random_state=42
+)
+dt_pca.fit(X_pca, y_train)  # 直接使用NumPy数组
 
-# # 2. 转换为NumPy数组避免索引问题
-# pc1 = X_pca[:, 0]  # 第一主成分
-# pc2 = X_pca[:, 1]  # 第二主成分
+# 4. 生成网格数据
+x_min, x_max = pc1.min()-1, pc1.max()+1
+y_min, y_max = pc2.min()-1, pc2.max()+1
+xx, yy = np.meshgrid(np.arange(x_min, x_max, 0.1),
+                     np.arange(y_min, y_max, 0.1))
 
-# # 3. 训练专用模型
-# dt_pca = DecisionTreeClassifier(
-#     max_depth=8,
-#     min_samples_split=10,
-#     random_state=42
-# )
-# dt_pca.fit(X_pca, y_train)  # 直接使用NumPy数组
+# 5. 预测网格点（使用NumPy数组）
+grid_pred = dt_pca.predict(np.c_[xx.ravel(), yy.ravel()])
+grid_pred = grid_pred.reshape(xx.shape)
 
-# # 4. 生成网格数据
-# x_min, x_max = pc1.min()-1, pc1.max()+1
-# y_min, y_max = pc2.min()-1, pc2.max()+1
-# xx, yy = np.meshgrid(np.arange(x_min, x_max, 0.1),
-#                      np.arange(y_min, y_max, 0.1))
+# 6. 可视化设置
+colors = ['#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF', '#800080']
+cmap = ListedColormap(colors[:len(le.classes_)])
+markers = ['o', 's', '^', 'v', 'D', 'p', '*']
 
-# # 5. 预测网格点（使用NumPy数组）
-# grid_pred = dt_pca.predict(np.c_[xx.ravel(), yy.ravel()])
-# grid_pred = grid_pred.reshape(xx.shape)
+plt.figure(figsize=(12, 10))
+plt.contourf(xx, yy, grid_pred, alpha=0.4, cmap=cmap)
 
-# # 6. 可视化设置
-# colors = ['#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF', '#800080']
-# cmap = ListedColormap(colors[:len(le.classes_)])
-# markers = ['o', 's', '^', 'v', 'D', 'p', '*']
+# 7. 绘制样本点（基于数组索引）
+np.random.seed(42)
+sample_mask = np.random.rand(len(X_pca)) < 0.3  # 正确长度
 
-# plt.figure(figsize=(12, 10))
-# plt.contourf(xx, yy, grid_pred, alpha=0.4, cmap=cmap)
-
-# # 7. 绘制样本点（基于数组索引）
-# np.random.seed(42)
-# sample_mask = np.random.rand(len(X_pca)) < 0.3  # 正确长度
-
-# for i, class_name in enumerate(le.classes_):
-#     # 获取当前类别的编码
-#     class_code = le.transform([class_name])[0]
+for i, class_name in enumerate(le.classes_):
+    # 获取当前类别的编码
+    class_code = le.transform([class_name])[0]
     
-#     # 生成类别掩码（数组操作）
-#     class_mask = (y_train.values == class_code)
+    # 生成类别掩码（数组操作）
+    class_mask = (y_train.values == class_code)
     
-#     # 组合掩码
-#     mask = class_mask & sample_mask
+    # 组合掩码
+    mask = class_mask & sample_mask
     
-#     plt.scatter(pc1[mask], pc2[mask],
-#                 c=colors[i],
-#                 marker=markers[i],
-#                 label=class_name,
-#                 edgecolor='black',
-#                 s=50)
+    plt.scatter(pc1[mask], pc2[mask],
+                c=colors[i],
+                marker=markers[i],
+                label=class_name,
+                edgecolor='black',
+                s=50)
 
-# plt.title("Decision Boundaries (PCA Projection)", fontsize=14)
-# plt.xlabel("Principal Component 1", fontsize=12)
-# plt.ylabel("Principal Component 2", fontsize=12)
-# plt.legend(loc='upper right')
-# plt.grid(alpha=0.3)
-# plt.tight_layout()
-# plt.show()
+plt.title("Decision Boundaries (PCA Projection)", fontsize=14)
+plt.xlabel("Principal Component 1", fontsize=12)
+plt.ylabel("Principal Component 2", fontsize=12)
+plt.legend(loc='upper right')
+plt.grid(alpha=0.3)
+plt.tight_layout()
+plt.show()
 
