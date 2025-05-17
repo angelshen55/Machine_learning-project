@@ -19,7 +19,7 @@ from itertools import cycle
 # 配置参数
 RANDOM_STATE = 42
 TEST_SIZE = 0.3
-FILE_PATH = 'Dry_Bean_Dataset.xlsx'
+FILE_PATH = 'DryBeanDataset/Dry_Bean_Dataset.xlsx'
 
 # 数据加载与预处理
 def load_data():
@@ -68,7 +68,7 @@ def main():
     
     # 配置基学习器
     md = 5
-    for md in range(5,50):
+    for md in range(5,30):
         base_tree = DecisionTreeClassifier(
             max_depth=md,
             min_samples_split=10,
