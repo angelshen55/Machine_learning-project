@@ -65,6 +65,59 @@ print(f"准确率: {accuracy_score(y_test, y_pred):.2%}")
 print("\n分类报告:")
 print(classification_report(y_test, y_pred))
 
+# ================== 新增代码：ROC曲线和AUC ==================
+# 将标签二值化
+y_test_bin = label_binarize(y_test, classes=rf.classes_)
+n_classes = y_test_bin.shape[1]
+
+# 计算每个类别的ROC曲线
+fpr = dict()
+tpr = dict()
+roc_auc = dict()
+for i in range(n_classes):
+    fpr[i], tpr[i], _ = roc_curve(y_test_bin[:, i], y_proba[:, i])
+    roc_auc[i] = auc(fpr[i], tpr[i])
+
+# 计算宏观平均ROC曲线
+fpr["macro"], tpr["macro"], _ = roc_curve(y_test_bin.ravel(), y_proba.ravel())
+roc_auc["macro"] = auc(fpr["macro"], tpr["macro"])
+
+# 计算微观平均ROC曲线
+fpr["micro"], tpr["micro"], _ = roc_curve(y_test_bin.ravel(), y_proba.ravel())
+roc_auc["micro"] = auc(fpr["micro"], tpr["micro"])
+
+# 绘制所有ROC曲线
+plt.figure(figsize=(10, 8))
+colors = cycle(['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728',
+                '#9467bd', '#8c564b', '#e377c2'])
+
+# 绘制每个类别
+for i, color in zip(range(n_classes), colors):
+    plt.plot(fpr[i], tpr[i], color=color, lw=2,
+             label=f'{rf.classes_[i]} (AUC = {roc_auc[i]:.2f})')
+
+# 绘制宏观平均
+plt.plot(fpr["macro"], tpr["macro"],
+         label=f'Macro-average (AUC = {roc_auc["macro"]:.2f})',
+         color='navy', linestyle=':', linewidth=4)
+
+# 绘制微观平均
+plt.plot(fpr["micro"], tpr["micro"],
+         label=f'Micro-average (AUC = {roc_auc["micro"]:.2f})',
+         color='deeppink', linestyle=':', linewidth=4)
+
+# 绘制随机猜测线
+plt.plot([0, 1], [0, 1], 'k--', lw=2)
+plt.xlim([0.0, 1.0])
+plt.ylim([0.0, 1.05])
+plt.xlabel('False Positive Rate', fontsize=12)
+plt.ylabel('True Positive Rate', fontsize=12)
+plt.title('Multiclass ROC Curves', fontsize=14)
+plt.legend(loc="lower right", fontsize=10)
+plt.grid(alpha=0.3)
+plt.tight_layout()
+plt.show()
+
 
 
 # ================== 新增代码：模型综合评估 ==================

@@ -1,7 +1,7 @@
 # bagging_model.py
 import pandas as pd
 from sklearn.decomposition import PCA
-from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import LabelEncoder, StandardScaler
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -93,21 +93,24 @@ def plot_confusion_matrices(model, X_train, y_train, X_test, y_test, X_full, y_f
         plt.tight_layout()
         plt.show()
 
-# ================== 新增代码：决策边界可视化 ==================
-def plot_decision_boundary(model, X, y, title="Decision Boundary"):
+def plot_decision_boundary(model, X, y, best_depth, title="Decision Boundary"):
     """生成并显示PCA降维后的决策边界"""
     # 标签编码
     le = LabelEncoder()
     y_encoded = le.fit_transform(y)
     
+    # 特征标准化
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+    
     # PCA降维
     pca = PCA(n_components=2)
-    X_pca = pca.fit_transform(X)
+    X_pca = pca.fit_transform(X_scaled)
     
-    # 训练专用模型（保持相同参数）
+    # 训练专用模型
     boundary_model = BaggingClassifier(
         estimator=DecisionTreeClassifier(
-            max_depth=13,
+            max_depth=best_depth,
             min_samples_split=10,
             random_state=RANDOM_STATE
         ),
@@ -127,14 +130,15 @@ def plot_decision_boundary(model, X, y, title="Decision Boundary"):
                          np.linspace(y_min, y_max, 200))
     
     # 预测网格点
-    Z = boundary_model.predict(np.c_[xx.ravel(), yy.ravel()])
+    grid_pca = np.c_[xx.ravel(), yy.ravel()]
+    Z = boundary_model.predict(grid_pca)
     Z = Z.reshape(xx.shape)
     
-    # 可视化设置
+    # 可视化
     plt.figure(figsize=(15, 12))
     plt.contourf(xx, yy, Z, alpha=0.4, cmap=plt.cm.tab10)
     
-    # 绘制样本点（随机30%）
+    # 绘制样本点
     np.random.seed(RANDOM_STATE)
     sample_mask = np.random.rand(len(X_pca)) < 0.3
     scatter = plt.scatter(
@@ -153,12 +157,64 @@ def plot_decision_boundary(model, X, y, title="Decision Boundary"):
               bbox_to_anchor=(1.05, 1),
               loc='upper left')
     
-    plt.title(f"{title} (PCA Projection)\nmax_depth={13}", fontsize=16)
+    plt.title(f"{title} (Standardized PCA)\nBest Depth: {best_depth}", fontsize=16)
     plt.xlabel("Principal Component 1", fontsize=12)
     plt.ylabel("Principal Component 2", fontsize=12)
     plt.grid(alpha=0.3)
     plt.tight_layout()
     plt.show()
+
+# ================== 新增函数：绘制ROC曲线 ==================
+def plot_roc_curve(model, X_test, y_test):
+    """生成多类别ROC曲线和AUC值"""
+    # 将标签二值化
+    y_test_bin = label_binarize(y_test, classes=model.classes_)
+    n_classes = y_test_bin.shape[1]
+    
+    # 获取预测概率
+    y_proba = model.predict_proba(X_test)
+    
+    # 计算每个类别的ROC曲线
+    fpr = dict()
+    tpr = dict()
+    roc_auc = dict()
+    for i in range(n_classes):
+        fpr[i], tpr[i], _ = roc_curve(y_test_bin[:, i], y_proba[:, i])
+        roc_auc[i] = auc(fpr[i], tpr[i])
+    
+    # 计算宏观平均
+    fpr["macro"], tpr["macro"], _ = roc_curve(y_test_bin.ravel(), y_proba.ravel())
+    roc_auc["macro"] = auc(fpr["macro"], tpr["macro"])
+    
+    # 可视化设置
+    plt.figure(figsize=(12, 10))
+    colors = cycle(['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728',
+                    '#9467bd', '#8c564b', '#e377c2'])
+    
+    # 绘制每个类别
+    for i, color in zip(range(n_classes), colors):
+        plt.plot(fpr[i], tpr[i], color=color, lw=2,
+                 label=f'{model.classes_[i]} (AUC = {roc_auc[i]:.2f})')
+    
+    # 绘制平均曲线
+    plt.plot(fpr["macro"], tpr["macro"],
+             label=f'Macro-average (AUC = {roc_auc["macro"]:.2f})',
+             color='navy', linestyle=':', linewidth=4)
+    
+    # 绘制随机猜测线
+    plt.plot([0, 1], [0, 1], 'k--', lw=2)
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('False Positive Rate', fontsize=12)
+    plt.ylabel('True Positive Rate', fontsize=12)
+    plt.title('Multiclass ROC Curves', fontsize=16)
+    plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
+    plt.grid(alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+
+
+
 
 
 
@@ -206,7 +262,6 @@ def main():
         
         print(f"max_depth={md} 准确率: {acc:.2%}")
         
-        # 更新最佳模型
         if acc > best_accuracy:
             best_accuracy = acc
             best_depth = md
@@ -229,13 +284,24 @@ def main():
 
     # 生成混淆矩阵
     plot_confusion_matrices(best_model, 
-                           X_train, y_train,
-                           X_test, y_test,
-                           X, y,
-                           classes=best_model.classes_)
+                          X_train, y_train,
+                          X_test, y_test,
+                          X, y,
+                          classes=best_model.classes_)
     
-    # 在main函数最后添加调用
-    plot_decision_boundary(best_model, X_train, y_train, "Bagging Decision Boundary")
+    # 绘制决策边界
+    plot_decision_boundary(best_model, X_train, y_train, best_depth)
+    
+    # 模型评估
+    y_pred = bagging.predict(X_test)
+    y_proba = bagging.predict_proba(X_test)  # 确保这行存在
+    
+    # 新增ROC曲线绘制
+    plot_roc_curve(bagging, X_test, y_test)
+    
+    # 后续保持原有代码不变...
+
+
 
 if __name__ == "__main__":
     main()
