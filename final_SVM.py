@@ -15,8 +15,6 @@ import seaborn as sns
 from itertools import cycle
 from sklearn.pipeline import Pipeline
 from sklearn.decomposition import PCA
-from matplotlib.colors import ListedColormap
-
 
 # 1. 数据读取与预处理
 df = pd.read_excel('DryBeanDataset/Dry_Bean_Dataset.xlsx', engine='openpyxl')

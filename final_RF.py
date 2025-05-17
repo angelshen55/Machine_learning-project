@@ -7,8 +7,7 @@ from sklearn.metrics import (
     classification_report, 
     confusion_matrix,
     roc_curve,
-    auc,
-    RocCurveDisplay
+    auc
 )
 from sklearn.preprocessing import label_binarize
 from sklearn.decomposition import PCA

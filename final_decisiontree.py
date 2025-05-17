@@ -6,7 +6,7 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import (
     accuracy_score, classification_report, 
-    confusion_matrix, roc_curve, auc
+    confusion_matrix
 )
 from sklearn.preprocessing import label_binarize, LabelEncoder
 from sklearn.decomposition import PCA
@@ -264,3 +264,57 @@ plt.grid(alpha=0.3)
 plt.tight_layout()
 plt.show()
 
+# ================== 9. ROC & AUC 可视化 ==================
+# 1. 获取类别概率预测（需确保决策树启用概率预测）
+y_proba = final_dt.predict_proba(X_test[best_features])
+
+# 2. 二值化标签（多类别转换）
+n_classes = len(le.classes_)
+y_test_bin = label_binarize(y_test, classes=range(n_classes))
+
+# 3. 计算每个类别的 ROC 曲线和 AUC
+fpr = dict()
+tpr = dict()
+roc_auc = dict()
+
+for i in range(n_classes):
+    fpr[i], tpr[i], _ = roc_curve(y_test_bin[:, i], y_proba[:, i])
+    roc_auc[i] = auc(fpr[i], tpr[i])
+
+# 4. 计算宏平均（Macro-average）AUC
+fpr["macro"], tpr["macro"], _ = roc_curve(y_test_bin.ravel(), y_proba.ravel())
+roc_auc["macro"] = auc(fpr["macro"], tpr["macro"])
+
+# 5. 可视化设置
+plt.figure(figsize=(10, 8))
+colors = cycle(['#FF4500', '#1E90FF', '#3CB371', '#FFD700', '#BA55D3', 
+                '#00CED1', '#FF69B4'])  # 7 色循环应对 7 个豆类
+lw = 2
+
+# 6. 绘制每个类别的 ROC 曲线
+for i, color in zip(range(n_classes), colors):
+    plt.plot(fpr[i], tpr[i], color=color, lw=lw,
+             label=f'{le.classes_[i]} (AUC = {roc_auc[i]:.2f})')
+
+# 7. 绘制宏平均曲线
+plt.plot(fpr["macro"], tpr["macro"],
+         label=f'Macro-average (AUC = {roc_auc["macro"]:.2f})',
+         color='navy', linestyle='--', linewidth=2)
+
+# 8. 绘制对角线
+plt.plot([0, 1], [0, 1], 'k--', lw=lw)
+plt.xlim([0.0, 1.0])
+plt.ylim([0.0, 1.05])
+plt.xlabel('False Positive Rate', fontsize=12)
+plt.ylabel('True Positive Rate', fontsize=12)
+plt.title('Multi-class ROC Curve', fontsize=14)
+plt.legend(loc="lower right", prop={'size': 10})
+plt.grid(alpha=0.3)
+plt.tight_layout()
+plt.show()
+
+# 9. 输出关键指标
+print("\nAUC 汇总:")
+for i in range(n_classes):
+    print(f"{le.classes_[i]:<15}: {roc_auc[i]:.4f}")
+print(f"{'Macro-average':<15}: {roc_auc['macro']:.4f}")
