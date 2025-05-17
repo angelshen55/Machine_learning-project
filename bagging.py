@@ -49,7 +49,47 @@ def load_data():
     df['SF4_log'] = np.log(df['ShapeFactor4'].abs() + 1e-6)
     return df
 
+def evaluate_model(model, X_train, y_train, X_test, y_test, X_full, y_full):
+    """计算并打印三个数据集的准确率"""
+    # 训练集评估
+    y_train_pred = model.predict(X_train)
+    train_acc = accuracy_score(y_train, y_train_pred)
+    
+    # 测试集评估
+    y_test_pred = model.predict(X_test)
+    test_acc = accuracy_score(y_test, y_test_pred)
+    
+    # 完整数据集评估
+    y_full_pred = model.predict(X_full)
+    full_acc = accuracy_score(y_full, y_full_pred)
+    
+    return train_acc, test_acc, full_acc
 
+def plot_confusion_matrices(model, X_train, y_train, X_test, y_test, X_full, y_full, classes):
+    """生成并显示三个数据集的混淆矩阵"""
+    datasets = [
+        (X_train, y_train, "Training Set"),
+        (X_test, y_test, "Testing Set"),
+        (X_full, y_full, "Full Dataset")
+    ]
+    
+    for X, y, title in datasets:
+        y_pred = model.predict(X)
+        cm = confusion_matrix(y, y_pred)
+        
+        plt.figure(figsize=(15, 12))
+        sns.heatmap(cm, annot=True, fmt='d', 
+                    xticklabels=classes, 
+                    yticklabels=classes,
+                    cmap='Blues',
+                    annot_kws={'size': 8})
+        plt.title(f'Confusion Matrix ({title})', fontsize=16)
+        plt.xlabel('Predicted Label', fontsize=12)
+        plt.ylabel('True Label', fontsize=12)
+        plt.xticks(rotation=45)
+        plt.yticks(rotation=0)
+        plt.tight_layout()
+        plt.show()
 
 # 主流程
 def main():
@@ -66,17 +106,19 @@ def main():
         stratify=y
     )
     
-    # 配置基学习器
-    md = 5
-    for md in range(5,30):
+    # 跟踪最佳参数
+    best_depth = 5
+    best_accuracy = 0.0
+    best_model = None
+    
+    # 深度调优
+    for md in range(5, 20):
         base_tree = DecisionTreeClassifier(
             max_depth=md,
             min_samples_split=10,
             random_state=RANDOM_STATE
         )
-
         
-        # 创建Bagging模型
         bagging = BaggingClassifier(
             estimator=base_tree,
             n_estimators=100,
@@ -87,81 +129,39 @@ def main():
             random_state=RANDOM_STATE
         )
         
-        # 训练模型
         bagging.fit(X_train, y_train)
-        
-        # 模型评估
         y_pred = bagging.predict(X_test)
-        y_proba = bagging.predict_proba(X_test)
-        print(f"max depth = {md} 准确率: {accuracy_score(y_test, y_pred):.2%}")
+        acc = accuracy_score(y_test, y_pred)
+        
+        print(f"max_depth={md} 准确率: {acc:.2%}")
+        
+        # 更新最佳模型
+        if acc > best_accuracy:
+            best_accuracy = acc
+            best_depth = md
+            best_model = bagging
 
+    # 最终验证
+    train_acc, test_acc, full_acc = evaluate_model(
+        best_model,
+        X_train, y_train,
+        X_test, y_test,
+        X, y
+    )
+    
+    print(f"\n{' 最佳结果 ':=^40}")
+    print(f"最佳max_depth: {best_depth}")
+    print(f"训练集准确率: {train_acc:.2%}")
+    print(f"测试集准确率: {test_acc:.2%}") 
+    print(f"完整数据集准确率: {full_acc:.2%}")
+    print("="*40)
 
-    # # 输出结果
-    # print(f"准确率: {accuracy_score(y_test, y_pred):.2%}")
-    # print("\n分类报告:")
-    # print(classification_report(y_test, y_pred))
-    
-    # # 可视化混淆矩阵
-    # plt.figure(figsize=(10, 8))
-    # cm = confusion_matrix(y_test, y_pred)
-    # sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
-    #             xticklabels=bagging.classes_, 
-    #             yticklabels=bagging.classes_)
-    # plt.title('Confusion Matrix')
-    # plt.xlabel('Predicted')
-    # plt.ylabel('True')
-    # plt.show()
-    
-    # # 多分类ROC曲线
-    # y_test_bin = label_binarize(y_test, classes=bagging.classes_)
-    # n_classes = y_test_bin.shape[1]
-    
-    # fpr = dict()
-    # tpr = dict()
-    # roc_auc = dict()
-    # for i in range(n_classes):
-    #     fpr[i], tpr[i], _ = roc_curve(y_test_bin[:, i], y_proba[:, i])
-    #     roc_auc[i] = auc(fpr[i], tpr[i])
-    
-    # # 宏平均ROC曲线
-    # fpr["macro"], tpr["macro"], _ = roc_curve(y_test_bin.ravel(), y_proba.ravel())
-    # roc_auc["macro"] = auc(fpr["macro"], tpr["macro"])
-    
-    # plt.figure(figsize=(10, 8))
-    # colors = cycle(['aqua', 'darkorange', 'cornflowerblue', 'green', 'red', 'purple', 'brown'])
-    # for i, color in zip(range(n_classes), colors):
-    #     plt.plot(fpr[i], tpr[i], color=color, lw=2,
-    #              label=f'Class {bagging.classes_[i]} (AUC = {roc_auc[i]:.2f})')
-    
-    # plt.plot(fpr["macro"], tpr["macro"],
-    #          label=f'Macro-average (AUC = {roc_auc["macro"]:.2f})',
-    #          color='navy', linestyle=':', linewidth=4)
-    
-    # plt.plot([0, 1], [0, 1], 'k--', lw=2)
-    # plt.xlim([0.0, 1.0])
-    # plt.ylim([0.0, 1.05])
-    # plt.xlabel('False Positive Rate')
-    # plt.ylabel('True Positive Rate')
-    # plt.title('Multi-class ROC Curve')
-    # plt.legend(loc="lower right")
-    # plt.show()
-    
-    # # 特征重要性（基于基学习器平均）
-    # importances = np.mean([
-    #     est.feature_importances_ for est in bagging.estimators_
-    # ], axis=0)
-    
-    # sorted_idx = np.argsort(importances)[::-1]
-    # print("\n特征重要性:")
-    # for idx in sorted_idx:
-    #     print(f"{X.columns[idx]:<15} {importances[idx]:.4f}")
-    
-    # plt.figure(figsize=(10, 6))
-    # sns.barplot(x=importances[sorted_idx], y=X.columns[sorted_idx], palette="viridis")
-    # plt.title("Feature Importances (Bagging)")
-    # plt.xlabel("Importance Score")
-    # plt.tight_layout()
-    # plt.show()
+    # 生成混淆矩阵
+    plot_confusion_matrices(best_model, 
+                           X_train, y_train,
+                           X_test, y_test,
+                           X, y,
+                           classes=best_model.classes_)
 
 if __name__ == "__main__":
     main()
