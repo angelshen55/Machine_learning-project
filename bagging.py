@@ -1,5 +1,7 @@
 # bagging_model.py
 import pandas as pd
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import LabelEncoder
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -91,6 +93,75 @@ def plot_confusion_matrices(model, X_train, y_train, X_test, y_test, X_full, y_f
         plt.tight_layout()
         plt.show()
 
+# ================== 新增代码：决策边界可视化 ==================
+def plot_decision_boundary(model, X, y, title="Decision Boundary"):
+    """生成并显示PCA降维后的决策边界"""
+    # 标签编码
+    le = LabelEncoder()
+    y_encoded = le.fit_transform(y)
+    
+    # PCA降维
+    pca = PCA(n_components=2)
+    X_pca = pca.fit_transform(X)
+    
+    # 训练专用模型（保持相同参数）
+    boundary_model = BaggingClassifier(
+        estimator=DecisionTreeClassifier(
+            max_depth=13,
+            min_samples_split=10,
+            random_state=RANDOM_STATE
+        ),
+        n_estimators=100,
+        max_samples=0.8,
+        max_features=0.7,
+        bootstrap=True,
+        n_jobs=-1,
+        random_state=RANDOM_STATE
+    )
+    boundary_model.fit(X_pca, y_encoded)
+    
+    # 生成网格数据
+    x_min, x_max = X_pca[:, 0].min() - 1, X_pca[:, 0].max() + 1
+    y_min, y_max = X_pca[:, 1].min() - 1, X_pca[:, 1].max() + 1
+    xx, yy = np.meshgrid(np.linspace(x_min, x_max, 200),
+                         np.linspace(y_min, y_max, 200))
+    
+    # 预测网格点
+    Z = boundary_model.predict(np.c_[xx.ravel(), yy.ravel()])
+    Z = Z.reshape(xx.shape)
+    
+    # 可视化设置
+    plt.figure(figsize=(15, 12))
+    plt.contourf(xx, yy, Z, alpha=0.4, cmap=plt.cm.tab10)
+    
+    # 绘制样本点（随机30%）
+    np.random.seed(RANDOM_STATE)
+    sample_mask = np.random.rand(len(X_pca)) < 0.3
+    scatter = plt.scatter(
+        X_pca[sample_mask, 0], 
+        X_pca[sample_mask, 1], 
+        c=y_encoded[sample_mask], 
+        cmap=plt.cm.tab10,
+        edgecolor='k',
+        s=50
+    )
+    
+    # 图例设置
+    handles, _ = scatter.legend_elements()
+    plt.legend(handles, le.classes_, 
+              title="Bean Types", 
+              bbox_to_anchor=(1.05, 1),
+              loc='upper left')
+    
+    plt.title(f"{title} (PCA Projection)\nmax_depth={13}", fontsize=16)
+    plt.xlabel("Principal Component 1", fontsize=12)
+    plt.ylabel("Principal Component 2", fontsize=12)
+    plt.grid(alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+
+
+
 # 主流程
 def main():
     # 数据准备
@@ -162,6 +233,9 @@ def main():
                            X_test, y_test,
                            X, y,
                            classes=best_model.classes_)
+    
+    # 在main函数最后添加调用
+    plot_decision_boundary(best_model, X_train, y_train, "Bagging Decision Boundary")
 
 if __name__ == "__main__":
     main()
